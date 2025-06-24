@@ -1,6 +1,8 @@
 import java.awt.*;
 import java.io.*;
 import java.net.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import javax.swing.*;
 
 public class EchoClientGUI extends JFrame {
@@ -13,6 +15,8 @@ public class EchoClientGUI extends JFrame {
     private int clientNumber = 0;
     private String pseudo = "";
     private boolean pseudoSet = false;
+    // Formateur pour l'horodatage
+    private DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public EchoClientGUI() {
         setTitle("Client Echo"); 
@@ -40,7 +44,8 @@ public class EchoClientGUI extends JFrame {
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
-            chatArea.append("Connecte au serveur.\n");
+            String timestamp = getCurrentTimestamp();
+            chatArea.append("[" + timestamp + "] Connecte au serveur.\n");
 
             // Thread pour lire les messages entrants
             new Thread(() -> {
@@ -62,7 +67,8 @@ public class EchoClientGUI extends JFrame {
                                 if (userPseudo != null && !userPseudo.trim().isEmpty()) {
                                     pseudo = userPseudo.trim();
                                     out.println(pseudo);
-                                    chatArea.append("Pseudo defini : " + pseudo + "\n");
+                                    String timestamp2 = getCurrentTimestamp();
+                                    chatArea.append("[" + timestamp2 + "] Pseudo defini : " + pseudo + "\n");
                                 } else {
                                     out.println("Client");
                                 }
@@ -74,7 +80,8 @@ public class EchoClientGUI extends JFrame {
                                     String numberStr = parts[1].trim();
                                     clientNumber = Integer.parseInt(numberStr);
                                     setTitle(pseudo); 
-                                    chatArea.append("Numero de client attribue : " + clientNumber + "\n");
+                                    String timestamp3 = getCurrentTimestamp();
+                                    chatArea.append("[" + timestamp3 + "] Numero de client attribue : " + clientNumber + "\n");
                                 } else {
                                     chatArea.append("Format invalide pour CLIENT_NUMBER: " + response + "\n");
                                 }
@@ -88,26 +95,35 @@ public class EchoClientGUI extends JFrame {
                                 pseudo = parts[1].trim();
                                 pseudoSet = true;
                                 setTitle(pseudo);
-                                chatArea.append("Pseudo accepte : " + pseudo + "\n");
-                                chatArea.append("Vous pouvez maintenant communiquer !\n");
+                                String timestamp4 = getCurrentTimestamp();
+                                chatArea.append("[" + timestamp4 + "] Pseudo accepte : " + pseudo + "\n");
+                                chatArea.append("[" + timestamp4 + "] Vous pouvez maintenant communiquer !\n");
                             }
                         } else {
                             chatArea.append(response + "\n");
                         }
                     }
                 } catch (IOException ex) {
-                    chatArea.append("Deconnecte du serveur.\n");
+                    String timestamp5 = getCurrentTimestamp();
+                    chatArea.append("[" + timestamp5 + "] Deconnecte du serveur.\n");
                 }
             }).start();
 
         } catch (IOException e) {
-            chatArea.append("Erreur de connexion : " + e.getMessage() + "\n");
+            String timestamp6 = getCurrentTimestamp();
+            chatArea.append("[" + timestamp6 + "] Erreur de connexion : " + e.getMessage() + "\n");
         }
+    }
+
+    // Méthode pour obtenir l'horodatage actuel
+    private String getCurrentTimestamp() {
+        return LocalDateTime.now().format(timeFormatter);
     }
 
     private void sendMessage() {
         if (!pseudoSet) {
-            chatArea.append("Veuillez attendre que votre pseudo soit accepte.\n");
+            String timestamp = getCurrentTimestamp();
+            chatArea.append("[" + timestamp + "] Veuillez attendre que votre pseudo soit accepte.\n");
             return;
         }
         
@@ -120,9 +136,11 @@ public class EchoClientGUI extends JFrame {
         if (message.equalsIgnoreCase("exit")) {
             try {
                 socket.close(); 
-                chatArea.append("Deconnexion.\n");
+                String timestamp2 = getCurrentTimestamp();
+                chatArea.append("[" + timestamp2 + "] Deconnexion.\n");
             } catch (IOException e) {
-                chatArea.append("Erreur de fermeture : " + e.getMessage() + "\n");
+                String timestamp3 = getCurrentTimestamp();
+                chatArea.append("[" + timestamp3 + "] Erreur de fermeture : " + e.getMessage() + "\n");
             }
         }
     }

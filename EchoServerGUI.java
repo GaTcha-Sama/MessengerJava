@@ -1,6 +1,10 @@
 import java.awt.*;
 import java.io.*;
 import java.net.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -13,6 +17,11 @@ public class EchoServerGUI extends JFrame {
     private AtomicInteger clientCounter = new AtomicInteger(0);
     // Map pour stocker tous les clients connectés avec leurs pseudos
     private Map<Integer, ClientInfo> clients = new ConcurrentHashMap<>();
+    // Formateur pour l'horodatage
+    private DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    // Historique des messages (limité à 100 messages pour éviter la surcharge mémoire)
+    private List<String> messageHistory = new ArrayList<>();
+    private static final int MAX_HISTORY_SIZE = 100;
 
     private static class ClientInfo {
         PrintWriter out;
@@ -59,6 +68,35 @@ public class EchoServerGUI extends JFrame {
         }).start();
     }
 
+    // Méthode pour obtenir l'horodatage actuel
+    private String getCurrentTimestamp() {
+        return LocalDateTime.now().format(timeFormatter);
+    }
+
+    // Méthode pour ajouter un message à l'historique
+    private void addToHistory(String message) {
+        messageHistory.add(message);
+        // Limiter la taille de l'historique
+        if (messageHistory.size() > MAX_HISTORY_SIZE) {
+            messageHistory.remove(0);
+        }
+    }
+
+    // Méthode pour envoyer l'historique à un client
+    private void sendHistory(int clientNumber) {
+        ClientInfo clientInfo = clients.get(clientNumber);
+        if (clientInfo != null && !messageHistory.isEmpty()) {
+            String timestamp = getCurrentTimestamp();
+            clientInfo.out.println("[" + timestamp + "] --- Historique de la conversation ---");
+            
+            for (String message : messageHistory) {
+                clientInfo.out.println(message);
+            }
+            
+            clientInfo.out.println("[" + timestamp + "] --- Fin de l'historique ---");
+        }
+    }
+
     // Méthode de gestion des messages du client
     private void handleClient(Socket clientSocket, int clientNumber) {
         try (
@@ -78,29 +116,42 @@ public class EchoServerGUI extends JFrame {
             out.println("CLIENT_NUMBER:" + clientNumber);
             out.println("PSEUDO_ACCEPTED:" + pseudo);
             
+            // Envoyer l'historique AVANT d'envoyer la liste des clients
+            sendHistory(clientNumber);
+            
             sendClientList(clientNumber);
             
-            broadcastMessage(pseudo + " a rejoint le chat", clientNumber);
-            log(pseudo + " (Client " + clientNumber + ") a rejoint le chat");
+            String timestamp = getCurrentTimestamp();
+            String joinMessage = "[" + timestamp + "] " + pseudo + " a rejoint le chat";
+            broadcastMessage(joinMessage, clientNumber);
+            addToHistory(joinMessage); // Ajouter à l'historique
+            log("[" + timestamp + "] " + pseudo + " (Client " + clientNumber + ") a rejoint le chat");
             
             String message;
             while ((message = in.readLine()) != null) {
                 ClientInfo clientInfo = clients.get(clientNumber);
                 if (clientInfo != null) {
-                    log(clientInfo.pseudo + " : " + message);
+                    String timestamp2 = getCurrentTimestamp();
+                    String formattedMessage = "[" + timestamp2 + "] " + clientInfo.pseudo + " : " + message;
+                    log(formattedMessage);
 
                     if (message.equalsIgnoreCase("exit")) {
-                        log(clientInfo.pseudo + " a quitte la session.");
+                        String exitMessage = "[" + timestamp2 + "] " + clientInfo.pseudo + " a quitte la session.";
+                        log(exitMessage);
                         break;
                     }
 
-                    broadcastMessage(clientInfo.pseudo + " : " + message, clientNumber);
+                    broadcastMessage(formattedMessage, clientNumber);
+                    addToHistory(formattedMessage); // Ajouter à l'historique
                 }
             }
 
             ClientInfo clientInfo = clients.remove(clientNumber);
             if (clientInfo != null) {
-                broadcastMessage(clientInfo.pseudo + " a quitte le chat", -1);
+                String timestamp3 = getCurrentTimestamp();
+                String leaveMessage = "[" + timestamp3 + "] " + clientInfo.pseudo + " a quitte le chat";
+                broadcastMessage(leaveMessage, -1);
+                addToHistory(leaveMessage); // Ajouter à l'historique
                 broadcastClientList();
             }
             clientSocket.close();
@@ -111,11 +162,12 @@ public class EchoServerGUI extends JFrame {
         }
     }
 
-    // Méthode pour envoyer la liste des clients à un client
+    // Méthode pour envoyer la liste des clients à un client spécifique
     private void sendClientList(int clientNumber) {
         ClientInfo clientInfo = clients.get(clientNumber);
         if (clientInfo != null) {
-            StringBuilder clientList = new StringBuilder("Liste des clients connectes:");
+            String timestamp = getCurrentTimestamp();
+            StringBuilder clientList = new StringBuilder("[" + timestamp + "] Liste des clients connectes:");
             boolean hasOtherClients = false;
             
             for (Map.Entry<Integer, ClientInfo> entry : clients.entrySet()) {
