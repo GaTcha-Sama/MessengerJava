@@ -17,24 +17,57 @@ public class EchoClientGUI extends JFrame {
     private boolean pseudoSet = false;
     // Formateur pour l'horodatage
     private DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    // Nouveau: Map pour stocker les clients disponibles
+    private java.util.Map<Integer, String> availableClients = new java.util.HashMap<>();
 
     public EchoClientGUI() {
         setTitle("Client Echo"); 
-        setSize(400, 300);
+        setSize(500, 400);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
+        // Panel principal
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        
+        // Zone de chat
         chatArea = new JTextArea();
         chatArea.setEditable(false);
+        JScrollPane chatScrollPane = new JScrollPane(chatArea);
+        
+        // Panel de contrôle
+        JPanel controlPanel = new JPanel(new BorderLayout());
+        
+        // Zone de saisie
         inputField = new JTextField();
-
-        add(new JScrollPane(chatArea), BorderLayout.CENTER);
-        add(inputField, BorderLayout.SOUTH);
+        
+        // Panel des boutons
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        
+        // Bouton pour afficher la liste des clients
+        JButton listClientsButton = new JButton("Liste Clients");
+        listClientsButton.addActionListener(e -> requestClientList());
+        
+        buttonPanel.add(listClientsButton);
+        
+        controlPanel.add(inputField, BorderLayout.CENTER);
+        controlPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        mainPanel.add(chatScrollPane, BorderLayout.CENTER);
+        mainPanel.add(controlPanel, BorderLayout.SOUTH);
+        
+        add(mainPanel);
 
         inputField.addActionListener(e -> sendMessage());
 
         connectToServer();
 
         setVisible(true);
+    }
+
+    // Nouvelle méthode pour demander la liste des clients
+    private void requestClientList() {
+        if (out != null) {
+            out.println("/list");
+        }
     }
 
     // Connexion au serveur
@@ -79,7 +112,7 @@ public class EchoClientGUI extends JFrame {
                                 if (parts.length >= 2) {
                                     String numberStr = parts[1].trim();
                                     clientNumber = Integer.parseInt(numberStr);
-                                    setTitle(pseudo); 
+                                    setTitle(pseudo + " (Client " + clientNumber + ")"); 
                                     String timestamp3 = getCurrentTimestamp();
                                     chatArea.append("[" + timestamp3 + "] Numero de client attribue : " + clientNumber + "\n");
                                 } else {
@@ -94,11 +127,22 @@ public class EchoClientGUI extends JFrame {
                             if (parts.length >= 2) {
                                 pseudo = parts[1].trim();
                                 pseudoSet = true;
-                                setTitle(pseudo);
+                                setTitle(pseudo + " (Client " + clientNumber + ")");
                                 String timestamp4 = getCurrentTimestamp();
                                 chatArea.append("[" + timestamp4 + "] Pseudo accepte : " + pseudo + "\n");
                                 chatArea.append("[" + timestamp4 + "] Vous pouvez maintenant communiquer !\n");
+                                
+                                // Demander automatiquement la liste des clients après connexion
+                                SwingUtilities.invokeLater(() -> requestClientList());
                             }
+                        } else if (response.startsWith("[" + getCurrentTimestamp() + "] Liste des clients connectes:")) {
+                            // Mettre à jour la liste des clients disponibles
+                            updateAvailableClients(response);
+                        } else if (response.contains("Liste des clients connectes:")) {
+                            // Mettre à jour la liste des clients disponibles
+                            updateAvailableClients(response);
+                            // Afficher la liste dans le chat pour debug
+                            chatArea.append(response + "\n");
                         } else {
                             chatArea.append(response + "\n");
                         }
@@ -112,6 +156,30 @@ public class EchoClientGUI extends JFrame {
         } catch (IOException e) {
             String timestamp6 = getCurrentTimestamp();
             chatArea.append("[" + timestamp6 + "] Erreur de connexion : " + e.getMessage() + "\n");
+        }
+    }
+
+    // Nouvelle méthode pour mettre à jour la liste des clients disponibles
+    private void updateAvailableClients(String clientListMessage) {
+        availableClients.clear();
+        String[] parts = clientListMessage.split(":");
+        if (parts.length >= 2) {
+            String clientsPart = parts[1].trim();
+            if (!clientsPart.equals("aucun")) {
+                String[] clientEntries = clientsPart.split(",");
+                for (String entry : clientEntries) {
+                    String[] clientInfo = entry.trim().split(":");
+                    if (clientInfo.length >= 2) {
+                        try {
+                            int clientNum = Integer.parseInt(clientInfo[0].trim());
+                            String clientPseudo = clientInfo[1].trim();
+                            availableClients.put(clientNum, clientPseudo);
+                        } catch (NumberFormatException e) {
+                            // Ignorer les entrées invalides
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -130,7 +198,8 @@ public class EchoClientGUI extends JFrame {
         String message = inputField.getText();
         if (message.isEmpty()) return;
 
-        out.println(message); 
+        // Envoyer directement le message au serveur (plus de conversion)
+        out.println(message);
         inputField.setText("");
 
         if (message.equalsIgnoreCase("exit")) {

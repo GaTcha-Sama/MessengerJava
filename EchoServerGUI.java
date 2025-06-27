@@ -127,22 +127,30 @@ public class EchoServerGUI extends JFrame {
             addToHistory(joinMessage); // Ajouter à l'historique
             log("[" + timestamp + "] " + pseudo + " (Client " + clientNumber + ") a rejoint le chat");
             
+            // Mettre à jour la liste des clients pour tous
+            broadcastClientList();
+            
             String message;
             while ((message = in.readLine()) != null) {
                 ClientInfo clientInfo = clients.get(clientNumber);
                 if (clientInfo != null) {
-                    String timestamp2 = getCurrentTimestamp();
-                    String formattedMessage = "[" + timestamp2 + "] " + clientInfo.pseudo + " : " + message;
-                    log(formattedMessage);
-
-                    if (message.equalsIgnoreCase("exit")) {
-                        String exitMessage = "[" + timestamp2 + "] " + clientInfo.pseudo + " a quitte la session.";
+                    // Vérifier si c'est un message privé avec @<pseudo>
+                    if (message.startsWith("@")) {
+                        handlePrivateMessageByPseudo(message, clientNumber, clientInfo);
+                    } else if (message.equals("/list")) {
+                        // Envoyer la liste des clients
+                        sendClientList(clientNumber);
+                    } else if (message.equalsIgnoreCase("exit")) {
+                        String exitMessage = "[" + timestamp + "] " + clientInfo.pseudo + " a quitte la session.";
                         log(exitMessage);
                         break;
+                    } else {
+                        String timestamp2 = getCurrentTimestamp();
+                        String formattedMessage = "[" + timestamp2 + "] " + clientInfo.pseudo + " : " + message;
+                        log(formattedMessage);
+                        broadcastMessage(formattedMessage, clientNumber);
+                        addToHistory(formattedMessage); // Ajouter à l'historique
                     }
-
-                    broadcastMessage(formattedMessage, clientNumber);
-                    addToHistory(formattedMessage); // Ajouter à l'historique
                 }
             }
 
@@ -162,6 +170,53 @@ public class EchoServerGUI extends JFrame {
         }
     }
 
+    // Nouvelle méthode simplifiée pour gérer les messages privés par pseudo
+    private void handlePrivateMessageByPseudo(String message, int senderClientNumber, ClientInfo senderInfo) {
+        try {
+            // Format: @<pseudo> <message>
+            String[] parts = message.split(" ", 2);
+            if (parts.length >= 2) {
+                String targetPseudo = parts[0].substring(1); // Enlever le @
+                String privateMessage = parts[1];
+                
+                // Chercher le client par pseudo
+                ClientInfo targetClient = null;
+                for (Map.Entry<Integer, ClientInfo> entry : clients.entrySet()) {
+                    if (entry.getValue().pseudo.equals(targetPseudo)) {
+                        targetClient = entry.getValue();
+                        break;
+                    }
+                }
+                
+                if (targetClient != null) {
+                    String timestamp = getCurrentTimestamp();
+                    String formattedPrivateMessage = "[" + timestamp + "] [PRIVE] " + senderInfo.pseudo + " : " + privateMessage;
+                    
+                    // Envoyer au destinataire
+                    targetClient.out.println(formattedPrivateMessage);
+                    
+                    // Envoyer une confirmation à l'expéditeur
+                    String confirmationMessage = "[" + timestamp + "] [PRIVE] -> " + targetPseudo + " : " + privateMessage;
+                    senderInfo.out.println(confirmationMessage);
+                    
+                    log("[" + timestamp + "] Message privé de " + senderInfo.pseudo + " vers " + targetPseudo + " : " + privateMessage);
+                } else {
+                    String timestamp = getCurrentTimestamp();
+                    String errorMessage = "[" + timestamp + "] Erreur: Utilisateur '" + targetPseudo + "' non trouve.";
+                    senderInfo.out.println(errorMessage);
+                }
+            } else {
+                String timestamp = getCurrentTimestamp();
+                String errorMessage = "[" + timestamp + "] Format incorrect. Utilisez: @<pseudo> <message>";
+                senderInfo.out.println(errorMessage);
+            }
+        } catch (Exception e) {
+            String timestamp = getCurrentTimestamp();
+            String errorMessage = "[" + timestamp + "] Erreur lors de l'envoi du message privé.";
+            senderInfo.out.println(errorMessage);
+        }
+    }
+
     // Méthode pour envoyer la liste des clients à un client spécifique
     private void sendClientList(int clientNumber) {
         ClientInfo clientInfo = clients.get(clientNumber);
@@ -174,7 +229,7 @@ public class EchoServerGUI extends JFrame {
                 int num = entry.getKey();
                 ClientInfo info = entry.getValue();
                 if (num != clientNumber) { 
-                    clientList.append(num).append(":").append(info.pseudo).append(",");
+                    clientList.append(" ").append(num).append(":").append(info.pseudo).append(",");
                     hasOtherClients = true;
                 }
             }
@@ -188,6 +243,10 @@ public class EchoServerGUI extends JFrame {
             }
             
             clientInfo.out.println(clientList.toString());
+            
+            // Envoyer les commandes disponibles
+            String commandsMessage = "[" + timestamp + "] Commandes disponibles: @<pseudo> <message>, /list, exit";
+            clientInfo.out.println(commandsMessage);
         }
     }
 
